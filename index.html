@@ -48,7 +48,6 @@
             background-color: #fff;
         }
 
-        /* Gombok */
         .btn {
             width: 100%;
             padding: 14px;
@@ -64,20 +63,17 @@
         .btn-secondary { background-color: #e5e7eb; color: #374151; margin-top: 8px; font-size: 13px; padding: 10px; }
         .btn:active { opacity: 0.8; }
 
-        /* Fő mutatós kártyák */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .metric-card { background: #ccfbf1; border-left: 4px solid #0d9488; padding: 12px; border-radius: 8px; text-align: center; }
         .metric-value { font-size: 22px; font-weight: bold; color: #0f766e; }
         .metric-label { font-size: 11px; color: #4b5563; font-weight: bold; text-transform: uppercase; }
 
-        /* Típusok szerinti gombok */
         .type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .type-item { 
             background: #fff; border: 1px solid #e5e7eb; padding: 10px; border-radius: 8px; 
             text-align: center; cursor: pointer; border-bottom: 3px solid #0d9488;
         }
 
-        /* Lista nézet */
         #detailsSection { margin-top: 15px; display: none; border-top: 2px dashed #e5e7eb; padding-top: 15px; }
         .detail-item { 
             background: #f9fafb; padding: 10px; border-radius: 8px; margin-bottom: 8px; 
@@ -108,12 +104,12 @@
 
             <div style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
-                    <label>Induló Akku %</label>
-                    <input type="number" min="0" max="100" id="startSocInput" placeholder="pl. 15 (opcionális)">
+                    <label>Érkezési Akku %</label>
+                    <input type="number" min="0" max="100" id="startSocInput" placeholder="pl. 20 (amivel beálltál)">
                 </div>
                 <div style="flex: 1;">
-                    <label>Érkezési Akku %</label>
-                    <input type="number" min="0" max="100" id="endSocInput" placeholder="pl. 80 (opcionális)">
+                    <label>Feltöltött Akku %</label>
+                    <input type="number" min="0" max="100" id="endSocInput" placeholder="pl. 80 (amire feltöltötted)">
                 </div>
             </div>
 
@@ -137,7 +133,7 @@
             </select>
 
             <label>Megjegyzés (Opcionális)</label>
-            <input type="text" id="noteInput" placeholder="pl. Shell charger, autópályás tempó">
+            <input type="text" id="noteInput" placeholder="pl. Shell charger, autopálya">
 
             <button type="submit" class="btn btn-primary">Mentés az adatbázisba</button>
         </form>
@@ -167,11 +163,25 @@
         </div>
     </div>
 
+    <!-- HATÓTÁV MUTATÓK -->
     <div class="metrics-grid">
         <div class="metric-card" style="background: #e0f2fe; border-left-color: #0284c7;">
-            <div class="metric-label">Becsült 100% Hatótáv</div>
-            <div id="estRange" class="metric-value" style="color: #0369a1;">---</div>
-            <div style="font-size: 10px; color: #555;">km (SoC alapján)</div>
+            <div class="metric-label">80% ➔ 20% Hatótáv</div>
+            <div id="range8020" class="metric-value" style="color: #0369a1;">---</div>
+            <div style="font-size: 10px; color: #555;">km (60% akku)</div>
+        </div>
+        <div class="metric-card" style="background: #f0f9ff; border-left-color: #38bdf8;">
+            <div class="metric-label">100% Hatótáv</div>
+            <div id="range100" class="metric-value" style="color: #0284c7;">---</div>
+            <div style="font-size: 10px; color: #555;">km (teljes akku)</div>
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
+            <div class="metric-label">Összes Energia</div>
+            <div id="totalKwh" class="metric-value" style="color: #374151;">0</div>
+            <div style="font-size: 10px; color: #555;">kWh</div>
         </div>
         <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
             <div class="metric-label">Összes Költség</div>
@@ -294,7 +304,9 @@
         if (filtered.length === 0) {
             document.getElementById('avgCons').innerText = "0.0";
             document.getElementById('avgCostPerKm').innerText = "0";
-            document.getElementById('estRange').innerText = "---";
+            document.getElementById('range8020').innerText = "---";
+            document.getElementById('range100').innerText = "---";
+            document.getElementById('totalKwh').innerText = "0";
             document.getElementById('totalCost').innerText = "0";
             return;
         }
@@ -315,7 +327,7 @@
         let avgCons = totalKm > 0 ? ((totalKwh / totalKm) * 100).toFixed(1) : "0.0";
         let avgCostPerKm = totalKm > 0 ? (totalCost / totalKm).toFixed(1) : "0";
 
-        // 100%-os hatótáv számítása az SoC (százalék) adatokból
+        // Hatótáv számítása SoC alapon
         let totalRangeKm = 0;
         let totalUsedPercent = 0;
 
@@ -334,13 +346,14 @@
             }
         }
 
-        let est100Range = (totalUsedPercent > 0) 
-            ? Math.round((totalRangeKm / totalUsedPercent) * 100) 
-            : "---";
+        let range100Val = (totalUsedPercent > 0) ? Math.round((totalRangeKm / totalUsedPercent) * 100) : "---";
+        let range8020Val = (totalUsedPercent > 0) ? Math.round((totalRangeKm / totalUsedPercent) * 60) : "---";
 
         document.getElementById('avgCons').innerText = avgCons;
         document.getElementById('avgCostPerKm').innerText = avgCostPerKm;
-        document.getElementById('estRange').innerText = est100Range;
+        document.getElementById('range8020').innerText = range8020Val;
+        document.getElementById('range100').innerText = range100Val;
+        document.getElementById('totalKwh').innerText = Math.round(totalKwh);
         document.getElementById('totalCost').innerText = totalCost.toLocaleString('hu-HU');
     }
 
