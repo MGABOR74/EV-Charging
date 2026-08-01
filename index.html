@@ -76,7 +76,6 @@
             background: #fff; border: 1px solid #e5e7eb; padding: 10px; border-radius: 8px; 
             text-align: center; cursor: pointer; border-bottom: 3px solid #0d9488;
         }
-        .type-item.active { background: #f0fdf4; border-bottom-width: 5px; }
 
         /* Lista nézet */
         #detailsSection { margin-top: 15px; display: none; border-top: 2px dashed #e5e7eb; padding-top: 15px; }
@@ -109,6 +108,17 @@
 
             <div style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
+                    <label>Induló Akku %</label>
+                    <input type="number" min="0" max="100" id="startSocInput" placeholder="pl. 15 (opcionális)">
+                </div>
+                <div style="flex: 1;">
+                    <label>Érkezési Akku %</label>
+                    <input type="number" min="0" max="100" id="endSocInput" placeholder="pl. 80 (opcionális)">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
                     <label>Töltött kWh</label>
                     <input type="number" step="0.1" id="kwhInput" placeholder="pl. 34.5" required>
                 </div>
@@ -127,7 +137,7 @@
             </select>
 
             <label>Megjegyzés (Opcionális)</label>
-            <input type="text" id="noteInput" placeholder="pl. Shell charger, 80%-ig">
+            <input type="text" id="noteInput" placeholder="pl. Shell charger, autópályás tempó">
 
             <button type="submit" class="btn btn-primary">Mentés az adatbázisba</button>
         </form>
@@ -158,10 +168,10 @@
     </div>
 
     <div class="metrics-grid">
-        <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
-            <div class="metric-label">Összes Energia</div>
-            <div id="totalKwh" class="metric-value" style="color: #374151;">0</div>
-            <div style="font-size: 10px; color: #555;">kWh</div>
+        <div class="metric-card" style="background: #e0f2fe; border-left-color: #0284c7;">
+            <div class="metric-label">Becsült 100% Hatótáv</div>
+            <div id="estRange" class="metric-value" style="color: #0369a1;">---</div>
+            <div style="font-size: 10px; color: #555;">km (SoC alapján)</div>
         </div>
         <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
             <div class="metric-label">Összes Költség</div>
@@ -180,7 +190,6 @@
         <div id="detailList"></div>
     </div>
 
-    <!-- ADATOK EXPORTÁLÁSA -->
     <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 10px;">
         <button onclick="exportToCSV()" class="btn btn-secondary">📥 Adatok letöltése CSV fájlba</button>
     </div>
@@ -199,7 +208,6 @@
         if (local) {
             globalData = JSON.parse(local);
         } else {
-            // e-data.csv betöltése
             Papa.parse("e-data.csv", {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
@@ -225,6 +233,8 @@
             "Charged_kWh": document.getElementById('kwhInput').value,
             "Cost_HUF": document.getElementById('costInput').value,
             "Charge_Type": document.getElementById('typeInput').value,
+            "Start_SoC": document.getElementById('startSocInput').value,
+            "End_SoC": document.getElementById('endSocInput').value,
             "Note": document.getElementById('noteInput').value
         };
 
@@ -235,6 +245,8 @@
         document.getElementById('odoInput').value = '';
         document.getElementById('kwhInput').value = '';
         document.getElementById('costInput').value = '';
+        document.getElementById('startSocInput').value = '';
+        document.getElementById('endSocInput').value = '';
         document.getElementById('noteInput').value = '';
         alert('Töltés sikeresen elmentve!');
     }
@@ -282,7 +294,7 @@
         if (filtered.length === 0) {
             document.getElementById('avgCons').innerText = "0.0";
             document.getElementById('avgCostPerKm').innerText = "0";
-            document.getElementById('totalKwh').innerText = "0";
+            document.getElementById('estRange').innerText = "---";
             document.getElementById('totalCost').innerText = "0";
             return;
         }
@@ -303,9 +315,32 @@
         let avgCons = totalKm > 0 ? ((totalKwh / totalKm) * 100).toFixed(1) : "0.0";
         let avgCostPerKm = totalKm > 0 ? (totalCost / totalKm).toFixed(1) : "0";
 
+        // 100%-os hatótáv számítása az SoC (százalék) adatokból
+        let totalRangeKm = 0;
+        let totalUsedPercent = 0;
+
+        for (let i = 1; i < filtered.length; i++) {
+            const prev = filtered[i-1];
+            const curr = filtered[i];
+
+            if (prev.End_SoC && curr.Start_SoC && prev.Odometer && curr.Odometer) {
+                const usedPct = parseFloat(prev.End_SoC) - parseFloat(curr.Start_SoC);
+                const kmDiff = parseFloat(curr.Odometer) - parseFloat(prev.Odometer);
+
+                if (usedPct > 0 && kmDiff > 0) {
+                    totalUsedPercent += usedPct;
+                    totalRangeKm += kmDiff;
+                }
+            }
+        }
+
+        let est100Range = (totalUsedPercent > 0) 
+            ? Math.round((totalRangeKm / totalUsedPercent) * 100) 
+            : "---";
+
         document.getElementById('avgCons').innerText = avgCons;
         document.getElementById('avgCostPerKm').innerText = avgCostPerKm;
-        document.getElementById('totalKwh').innerText = Math.round(totalKwh);
+        document.getElementById('estRange').innerText = est100Range;
         document.getElementById('totalCost').innerText = totalCost.toLocaleString('hu-HU');
     }
 
@@ -348,12 +383,16 @@
         for (let i = globalData.length - 1; i >= 0; i--) {
             const item = globalData[i];
             if (item.Charge_Type === type) {
+                const socInfo = (item.Start_SoC || item.End_SoC) 
+                    ? ` | Akku: ${item.Start_SoC || '?'}% ➔ ${item.End_SoC || '?'}%` 
+                    : '';
+                
                 const div = document.createElement('div');
                 div.className = 'detail-item';
                 div.innerHTML = `
                     <div>
                         <b>${item.Date}</b> (${item.Odometer} km)<br>
-                        <small style="color:#6b7280;">${item.Note || 'Nincs megjegyzés'}</small>
+                        <small style="color:#6b7280;">${item.Note || 'Nincs megjegyzés'}${socInfo}</small>
                     </div>
                     <div style="text-align:right;">
                         <span style="color:#0d9488; font-weight:bold;">+${item.Charged_kWh} kWh</span><br>
