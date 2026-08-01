@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EV Töltés Napló</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="theme-color" content="#0d9488">
+    <meta name="apple-mobile-web-app-title" content="EV Napló">
+
+    <style>
+        body { 
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            background-color: #f0fdf4; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 15px; 
+            margin: 0;
+            color: #1f2937;
+        }
+
+        .container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
+            width: 100%; 
+            max-width: 550px; 
+            margin-bottom: 20px; 
+            box-sizing: border-box;
+        }
+
+        h1 { font-size: 24px; color: #0d9488; text-align: center; margin: 5px 0 15px 0; }
+        h2 { font-size: 18px; color: #0d9488; text-align: center; margin-top: 0; }
+        label { display: block; margin-top: 10px; margin-bottom: 4px; font-weight: bold; font-size: 14px; color: #374151; }
+        
+        input, select { 
+            width: 100%; 
+            padding: 12px; 
+            border-radius: 8px; 
+            border: 1px solid #d1d5db; 
+            font-size: 15px; 
+            box-sizing: border-box;
+            background-color: #fff;
+        }
+
+        /* Gombok */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: opacity 0.2s;
+        }
+        .btn-primary { background-color: #0d9488; color: white; }
+        .btn-secondary { background-color: #e5e7eb; color: #374151; margin-top: 8px; font-size: 13px; padding: 10px; }
+        .btn:active { opacity: 0.8; }
+
+        /* Fő mutatós kártyák */
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .metric-card { background: #ccfbf1; border-left: 4px solid #0d9488; padding: 12px; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 22px; font-weight: bold; color: #0f766e; }
+        .metric-label { font-size: 11px; color: #4b5563; font-weight: bold; text-transform: uppercase; }
+
+        /* Típusok szerinti gombok */
+        .type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .type-item { 
+            background: #fff; border: 1px solid #e5e7eb; padding: 10px; border-radius: 8px; 
+            text-align: center; cursor: pointer; border-bottom: 3px solid #0d9488;
+        }
+        .type-item.active { background: #f0fdf4; border-bottom-width: 5px; }
+
+        /* Lista nézet */
+        #detailsSection { margin-top: 15px; display: none; border-top: 2px dashed #e5e7eb; padding-top: 15px; }
+        .detail-item { 
+            background: #f9fafb; padding: 10px; border-radius: 8px; margin-bottom: 8px; 
+            font-size: 13px; border-left: 4px solid #10b981; display: flex; justify-content: space-between; align-items: center;
+        }
+        .delete-btn { color: #ef4444; font-weight: bold; cursor: pointer; margin-left: 10px; font-size: 16px; padding: 5px; }
+        
+        details summary { font-weight: bold; color: #0d9488; cursor: pointer; padding: 5px 0; text-align: center; }
+    </style>
+</head>
+<body>
+
+<!-- 1. ÚJ ADAT BEVITELE ŰRLAP -->
+<div class="container">
+    <details open>
+        <summary>➕ Új Töltés Bejegyzése</summary>
+        <form id="evForm" onsubmit="saveEntry(event)" style="margin-top: 10px;">
+            <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label>Dátum</label>
+                    <input type="date" id="dateInput" required>
+                </div>
+                <div style="flex: 1;">
+                    <label>Km óra állás</label>
+                    <input type="number" id="odoInput" placeholder="pl. 45200" required>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label>Töltött kWh</label>
+                    <input type="number" step="0.1" id="kwhInput" placeholder="pl. 34.5" required>
+                </div>
+                <div style="flex: 1;">
+                    <label>Költség (Ft)</label>
+                    <input type="number" id="costInput" placeholder="pl. 2480" required>
+                </div>
+            </div>
+
+            <label>Töltés Típusa / Helye</label>
+            <select id="typeInput" required>
+                <option value="Otthoni AC">Otthoni AC</option>
+                <option value="Nyilvános AC">Nyilvános AC</option>
+                <option value="Nyilvános DC (Gyorstöltő)">Nyilvános DC (Gyorstöltő)</option>
+                <option value="Ingyenes AC">Ingyenes AC</option>
+            </select>
+
+            <label>Megjegyzés (Opcionális)</label>
+            <input type="text" id="noteInput" placeholder="pl. Shell charger, 80%-ig">
+
+            <button type="submit" class="btn btn-primary">Mentés az adatbázisba</button>
+        </form>
+    </details>
+</div>
+
+<!-- 2. STATISZTIKÁK ÉS KÁRTYÁK -->
+<div class="container">
+    <h1>⚡ Statisztika</h1>
+    
+    <label>Szűrés típus szerint:</label>
+    <select id="typeSelect" onchange="calculateMetrics()">
+        <option value="ALL">-- Összes Töltés --</option>
+    </select>
+    <br><br>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Átlagfogyasztás</div>
+            <div id="avgCons" class="metric-value">0.0</div>
+            <div style="font-size: 10px; color: #555;">kWh / 100 km</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Km Költség</div>
+            <div id="avgCostPerKm" class="metric-value">0</div>
+            <div style="font-size: 10px; color: #555;">Ft / km</div>
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
+            <div class="metric-label">Összes Energia</div>
+            <div id="totalKwh" class="metric-value" style="color: #374151;">0</div>
+            <div style="font-size: 10px; color: #555;">kWh</div>
+        </div>
+        <div class="metric-card" style="background: #f3f4f6; border-left-color: #6b7280;">
+            <div class="metric-label">Összes Költség</div>
+            <div id="totalCost" class="metric-value" style="color: #374151;">0</div>
+            <div style="font-size: 10px; color: #555;">Ft</div>
+        </div>
+    </div>
+</div>
+
+<!-- 3. TÖLTÉSEK MEGOSZLÁSA ÉS NAPLÓ -->
+<div class="container">
+    <h2>📊 Töltések Naplója</h2>
+    <div id="typeGrid" class="type-grid"></div>
+
+    <div id="detailsSection">
+        <div id="detailList"></div>
+    </div>
+
+    <!-- ADATOK EXPORTÁLÁSA -->
+    <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 10px;">
+        <button onclick="exportToCSV()" class="btn btn-secondary">📥 Adatok letöltése CSV fájlba</button>
+    </div>
+</div>
+
+<script>
+    let globalData = [];
+    let currentOpenType = null;
+
+    document.getElementById('dateInput').valueAsDate = new Date();
+
+    loadData();
+
+    function loadData() {
+        const local = localStorage.getItem('ev_charging_data');
+        if (local) {
+            globalData = JSON.parse(local);
+        } else {
+            // e-data.csv betöltése
+            Papa.parse("e-data.csv", {
+                download: true, header: true, skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        globalData = results.data;
+                        saveToLocalStorage();
+                    }
+                    refreshUI();
+                },
+                error: function() { refreshUI(); }
+            });
+            return;
+        }
+        refreshUI();
+    }
+
+    function saveEntry(e) {
+        e.preventDefault();
+
+        const newEntry = {
+            "Date": document.getElementById('dateInput').value,
+            "Odometer": document.getElementById('odoInput').value,
+            "Charged_kWh": document.getElementById('kwhInput').value,
+            "Cost_HUF": document.getElementById('costInput').value,
+            "Charge_Type": document.getElementById('typeInput').value,
+            "Note": document.getElementById('noteInput').value
+        };
+
+        globalData.push(newEntry);
+        saveToLocalStorage();
+        refreshUI();
+
+        document.getElementById('odoInput').value = '';
+        document.getElementById('kwhInput').value = '';
+        document.getElementById('costInput').value = '';
+        document.getElementById('noteInput').value = '';
+        alert('Töltés sikeresen elmentve!');
+    }
+
+    function deleteEntry(index) {
+        if (confirm("Biztosan törölni szeretnéd ezt a bejegyzést?")) {
+            globalData.splice(index, 1);
+            saveToLocalStorage();
+            refreshUI();
+        }
+    }
+
+    function saveToLocalStorage() {
+        globalData.sort((a, b) => new Date(a.Date) - new Date(b.Date));
+        localStorage.setItem('ev_charging_data', JSON.stringify(globalData));
+    }
+
+    function refreshUI() {
+        setupDropdown();
+        renderTypeGrid();
+        calculateMetrics();
+        if (currentOpenType) showDetails(currentOpenType);
+    }
+
+    function setupDropdown() {
+        const select = document.getElementById('typeSelect');
+        const currentVal = select.value;
+        select.innerHTML = '<option value="ALL">-- Összes Töltés --</option>';
+        
+        const types = [...new Set(globalData.map(item => item.Charge_Type))].filter(Boolean).sort();
+        types.forEach(t => {
+            let opt = document.createElement('option');
+            opt.value = t; opt.innerHTML = t;
+            select.appendChild(opt);
+        });
+        select.value = currentVal || "ALL";
+    }
+
+    function calculateMetrics() {
+        const selectedType = document.getElementById('typeSelect').value;
+        const filtered = selectedType === "ALL" 
+            ? globalData 
+            : globalData.filter(d => d.Charge_Type === selectedType);
+
+        if (filtered.length === 0) {
+            document.getElementById('avgCons').innerText = "0.0";
+            document.getElementById('avgCostPerKm').innerText = "0";
+            document.getElementById('totalKwh').innerText = "0";
+            document.getElementById('totalCost').innerText = "0";
+            return;
+        }
+
+        let totalKwh = 0;
+        let totalCost = 0;
+
+        filtered.forEach(d => {
+            totalKwh += parseFloat(d.Charged_kWh) || 0;
+            totalCost += parseFloat(d.Cost_HUF) || 0;
+        });
+
+        const odos = filtered.map(d => parseFloat(d.Odometer)).filter(n => !isNaN(n));
+        const minOdo = Math.min(...odos);
+        const maxOdo = Math.max(...odos);
+        const totalKm = (odos.length > 1) ? (maxOdo - minOdo) : 0;
+
+        let avgCons = totalKm > 0 ? ((totalKwh / totalKm) * 100).toFixed(1) : "0.0";
+        let avgCostPerKm = totalKm > 0 ? (totalCost / totalKm).toFixed(1) : "0";
+
+        document.getElementById('avgCons').innerText = avgCons;
+        document.getElementById('avgCostPerKm').innerText = avgCostPerKm;
+        document.getElementById('totalKwh').innerText = Math.round(totalKwh);
+        document.getElementById('totalCost').innerText = totalCost.toLocaleString('hu-HU');
+    }
+
+    function renderTypeGrid() {
+        const grid = document.getElementById('typeGrid');
+        grid.innerHTML = "";
+        
+        const counts = {};
+        globalData.forEach(item => {
+            const t = item.Charge_Type;
+            if (t) counts[t] = (counts[t] || 0) + 1;
+        });
+
+        Object.keys(counts).forEach(type => {
+            const div = document.createElement('div');
+            div.className = 'type-item';
+            div.id = `btn-${type}`;
+            div.onclick = () => showDetails(type);
+            div.innerHTML = `
+                <div style="font-size:12px; color:#6b7280; font-weight:bold;">${type}</div>
+                <div style="font-size:18px; font-weight:bold; color:#0d9488;">${counts[type]} alkalom</div>
+            `;
+            grid.appendChild(div);
+        });
+    }
+
+    function showDetails(type) {
+        const section = document.getElementById('detailsSection');
+        const list = document.getElementById('detailList');
+
+        if (currentOpenType === type && section.style.display === 'block') {
+            section.style.display = 'none';
+            currentOpenType = null;
+            return;
+        }
+
+        currentOpenType = type;
+        list.innerHTML = `<div style="text-align:center; font-weight:bold; margin-bottom:10px; color:#0d9488;">${type} napló</div>`;
+        
+        for (let i = globalData.length - 1; i >= 0; i--) {
+            const item = globalData[i];
+            if (item.Charge_Type === type) {
+                const div = document.createElement('div');
+                div.className = 'detail-item';
+                div.innerHTML = `
+                    <div>
+                        <b>${item.Date}</b> (${item.Odometer} km)<br>
+                        <small style="color:#6b7280;">${item.Note || 'Nincs megjegyzés'}</small>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="color:#0d9488; font-weight:bold;">+${item.Charged_kWh} kWh</span><br>
+                        <small>${parseInt(item.Cost_HUF || 0).toLocaleString('hu-HU')} Ft</small>
+                    </div>
+                    <div class="delete-btn" onclick="deleteEntry(${i})">🗑️</div>
+                `;
+                list.appendChild(div);
+            }
+        }
+        section.style.display = 'block';
+    }
+
+    function exportToCSV() {
+        if (globalData.length === 0) { alert("Nincs mentett adat!"); return; }
+        const csv = Papa.unparse(globalData);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "e-data.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+</body>
+</html>
